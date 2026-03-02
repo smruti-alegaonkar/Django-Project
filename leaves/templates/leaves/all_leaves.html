@@ -1,0 +1,164 @@
+{% extends 'leaves/base.html' %}
+
+{% block title %}All Leaves - Leave Management{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="bi bi-list-check"></i> All Leave Requests</h1>
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h2>{{ total_requests }}</h2>
+                <p class="mb-0">Total Requests</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h2>{{ pending_count }}</h2>
+                <p class="mb-0">Pending</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h2>{{ approved_count }}</h2>
+                <p class="mb-0">Approved</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-danger">
+            <div class="card-body text-center">
+                <h2>{{ rejected_count }}</h2>
+                <p class="mb-0">Rejected</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="pending" {% if current_status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="approved" {% if current_status == 'approved' %}selected{% endif %}>Approved</option>
+                    <option value="rejected" {% if current_status == 'rejected' %}selected{% endif %}>Rejected</option>
+                    <option value="cancelled" {% if current_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Department</label>
+                <select name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}" {% if current_department == dept %}selected{% endif %}>{{ dept }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary d-block">
+                    <i class="bi bi-funnel"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Leave Requests Table -->
+<div class="card">
+    <div class="card-body">
+        {% if leave_requests %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Faculty</th>
+                        <th>Department</th>
+                        <th>Leave Type</th>
+                        <th>Period</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Applied</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for leave in leave_requests %}
+                    <tr>
+                        <td>
+                            <strong>{{ leave.faculty.user.get_full_name }}</strong><br>
+                            <small class="text-muted">{{ leave.faculty.employee_id }}</small>
+                        </td>
+                        <td>{{ leave.faculty.department }}</td>
+                        <td>{{ leave.leave_type.name }}</td>
+                        <td>{{ leave.start_date|date:"M d" }} - {{ leave.end_date|date:"M d" }}</td>
+                        <td>{{ leave.number_of_days }}</td>
+                        <td>
+                            <span class="badge badge-{{ leave.status }}">
+                                {{ leave.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ leave.applied_on|date:"M d, Y" }}</td>
+                        <td>
+                            {% if leave.status == 'pending' %}
+                            <a href="{% url 'leaves:review_leave' leave.id %}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-eye"></i> Review
+                            </a>
+                            {% else %}
+                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detailModal{{ leave.id }}">
+                                <i class="bi bi-info-circle"></i> Details
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    
+                    <!-- Detail Modal -->
+                    <div class="modal fade" id="detailModal{{ leave.id }}">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Leave Details</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <dl class="row">
+                                        <dt class="col-sm-5">Reason:</dt>
+                                        <dd class="col-sm-7">{{ leave.reason }}</dd>
+                                        
+                                        {% if leave.reviewed_by %}
+                                        <dt class="col-sm-5">Reviewed By:</dt>
+                                        <dd class="col-sm-7">{{ leave.reviewed_by.get_full_name }}</dd>
+                                        
+                                        <dt class="col-sm-5">Reviewed On:</dt>
+                                        <dd class="col-sm-7">{{ leave.reviewed_on|date:"M d, Y H:i" }}</dd>
+                                        {% endif %}
+                                        
+                                        {% if leave.admin_remarks %}
+                                        <dt class="col-sm-5">Admin Remarks:</dt>
+                                        <dd class="col-sm-7">{{ leave.admin_remarks }}</dd>
+                                        {% endif %}
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-center text-muted">No leave requests found.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

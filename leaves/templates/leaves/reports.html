@@ -1,0 +1,193 @@
+{% extends 'leaves/base.html' %}
+
+{% block title %}Reports & Analytics - Leave Management{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2>Leave Reports & Analytics ({{ current_year }})</h2>
+    </div>
+    <div class="col-md-4 text-end">
+        <div class="btn-group">
+            <a href="{% url 'leaves:export_leaves_csv' %}?year={{ current_year }}" class="btn btn-success">
+                Export CSV
+            </a>
+            <a href="{% url 'leaves:export_leaves_pdf' %}" class="btn btn-danger">
+                Export PDF
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Leave Type Chart -->
+<div class="card mb-4">
+    <div class="card-header">
+        Leave Requests by Type
+    </div>
+    <div class="card-body">
+        <canvas id="leaveTypeChart"></canvas>
+    </div>
+</div>
+
+<!-- Department + Monthly -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                Leave by Department
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>Department</th>
+                            <th>Total Requests</th>
+                            <th>Total Days</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dept in leave_by_dept %}
+                        <tr>
+                            <td>{{ dept.faculty__department }}</td>
+                            <td>{{ dept.total }}</td>
+                            <td>{{ dept.total_days|default:0 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center">No data available</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                Monthly Approved Leaves
+            </div>
+            <div class="card-body">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Requesters -->
+<div class="card">
+    <div class="card-header">
+        Top Leave Requesters
+    </div>
+    <div class="card-body">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Faculty</th>
+                    <th>Department</th>
+                    <th>Total Requests</th>
+                    <th>Total Days</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for faculty in top_requesters %}
+                <tr>
+                    <td>
+                        {{ faculty.faculty__user__first_name }}
+                        {{ faculty.faculty__user__last_name }}
+                    </td>
+                    <td>{{ faculty.faculty__department }}</td>
+                    <td>{{ faculty.total_requests }}</td>
+                    <td>{{ faculty.total_days|default:0 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center">No data available</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+
+<!-- Safe JSON Data -->
+<script id="report-data" type="application/json">
+{
+    "labels": {{ leave_type_labels|default:"[]"|safe }},
+    "totals": {{ leave_type_totals|default:"[]"|safe }},
+    "approved": {{ leave_type_approved|default:"[]"|safe }},
+    "rejected": {{ leave_type_rejected|default:"[]"|safe }},
+    "pending": {{ leave_type_pending|default:"[]"|safe }},
+    "monthly": {{ monthly_leaves|default:"[]"|safe }}
+}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const rawData = document.getElementById("report-data").textContent;
+    const reportData = JSON.parse(rawData);
+
+    new Chart(document.getElementById("leaveTypeChart"), {
+        type: "bar",
+        data: {
+            labels: reportData.labels,
+            datasets: [
+                {
+                    label: "Total",
+                    data: reportData.totals
+                },
+                {
+                    label: "Approved",
+                    data: reportData.approved
+                },
+                {
+                    label: "Rejected",
+                    data: reportData.rejected
+                },
+                {
+                    label: "Pending",
+                    data: reportData.pending
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    new Chart(document.getElementById("monthlyChart"), {
+        type: "line",
+        data: {
+            labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+            datasets: [{
+                label: "Approved Leaves",
+                data: reportData.monthly,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'leaves/base.html' %}
+
+{% block title %}Leave History - Leave Management{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1><i class="bi bi-clock-history"></i> My Leave History</h1>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{% url 'leaves:apply_leave' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Apply New Leave
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if leave_requests %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Leave Type</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Applied On</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for leave in leave_requests %}
+                    <tr>
+                        <td>{{ leave.leave_type.name }}</td>
+                        <td>{{ leave.start_date|date:"M d, Y" }}</td>
+                        <td>{{ leave.end_date|date:"M d, Y" }}</td>
+                        <td>{{ leave.number_of_days }}</td>
+                        <td>
+                            <span class="badge badge-{{ leave.status }}">
+                                {{ leave.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ leave.applied_on|date:"M d, Y H:i" }}</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-info" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#leaveModal{{ leave.id }}">
+                                <i class="bi bi-eye"></i> View
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <!-- Modal for leave details -->
+                    <div class="modal fade" id="leaveModal{{ leave.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Leave Request Details</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <dl class="row">
+                                        <dt class="col-sm-4">Leave Type:</dt>
+                                        <dd class="col-sm-8">{{ leave.leave_type.name }}</dd>
+                                        
+                                        <dt class="col-sm-4">Start Date:</dt>
+                                        <dd class="col-sm-8">{{ leave.start_date|date:"M d, Y" }}</dd>
+                                        
+                                        <dt class="col-sm-4">End Date:</dt>
+                                        <dd class="col-sm-8">{{ leave.end_date|date:"M d, Y" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Number of Days:</dt>
+                                        <dd class="col-sm-8">{{ leave.number_of_days }}</dd>
+                                        
+                                        <dt class="col-sm-4">Reason:</dt>
+                                        <dd class="col-sm-8">{{ leave.reason }}</dd>
+                                        
+                                        <dt class="col-sm-4">Status:</dt>
+                                        <dd class="col-sm-8">
+                                            <span class="badge badge-{{ leave.status }}">
+                                                {{ leave.get_status_display }}
+                                            </span>
+                                        </dd>
+                                        
+                                        <dt class="col-sm-4">Applied On:</dt>
+                                        <dd class="col-sm-8">{{ leave.applied_on|date:"M d, Y H:i" }}</dd>
+                                        
+                                        {% if leave.reviewed_by %}
+                                        <dt class="col-sm-4">Reviewed By:</dt>
+                                        <dd class="col-sm-8">{{ leave.reviewed_by.get_full_name }}</dd>
+                                        
+                                        <dt class="col-sm-4">Reviewed On:</dt>
+                                        <dd class="col-sm-8">{{ leave.reviewed_on|date:"M d, Y H:i" }}</dd>
+                                        {% endif %}
+                                        
+                                        {% if leave.admin_remarks %}
+                                        <dt class="col-sm-4">Remarks:</dt>
+                                        <dd class="col-sm-8">{{ leave.admin_remarks }}</dd>
+                                        {% endif %}
+                                        
+                                        {% if leave.supporting_document %}
+                                        <dt class="col-sm-4">Document:</dt>
+                                        <dd class="col-sm-8">
+                                            <a href="{{ leave.supporting_document.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-download"></i> Download
+                                            </a>
+                                        </dd>
+                                        {% endif %}
+                                    </dl>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+            <p class="mt-3 text-muted">No leave requests yet.</p>
+            <a href="{% url 'leaves:apply_leave' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Apply for Your First Leave
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

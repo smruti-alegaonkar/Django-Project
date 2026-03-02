@@ -1,0 +1,107 @@
+{% extends 'leaves/base.html' %}
+
+{% block title %}Home - Leave Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Hero Section -->
+    <div class="col-12 mb-5">
+        <div class="jumbotron bg-light p-5 rounded">
+            <h1 class="display-4">
+                <i class="bi bi-calendar-check text-primary"></i>
+                Welcome to Faculty Leave Management System
+            </h1>
+            <p class="lead">Streamline your leave application process with our easy-to-use platform.</p>
+            <hr class="my-4">
+            <p>Apply for leaves, track your applications, and manage your leave balance - all in one place.</p>
+            {% if not user.is_authenticated %}
+                <a class="btn btn-primary btn-lg" href="{% url 'login' %}" role="button">
+                    <i class="bi bi-box-arrow-in-right"></i> Login
+                </a>
+                <a class="btn btn-outline-primary btn-lg" href="{% url 'leaves:register' %}" role="button">
+                    <i class="bi bi-person-plus"></i> Register
+                </a>
+            {% else %}
+                <a class="btn btn-primary btn-lg" href="{% url 'leaves:dashboard' %}" role="button">
+                    <i class="bi bi-speedometer2"></i> Go to Dashboard
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="col-12 mb-4">
+        <h2 class="text-center mb-4">Key Features</h2>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center fade-in">
+            <div class="card-body">
+                <i class="bi bi-file-earmark-text text-primary" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-3">Easy Application</h5>
+                <p class="card-text">Submit leave requests with just a few clicks. Attach supporting documents if needed.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center fade-in">
+            <div class="card-body">
+                <i class="bi bi-clock-history text-success" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-3">Track Status</h5>
+                <p class="card-text">Monitor your leave applications in real-time. Get notified when status changes.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center fade-in">
+            <div class="card-body">
+                <i class="bi bi-graph-up text-warning" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-3">Leave Balance</h5>
+                <p class="card-text">View your remaining leave balance for different leave types at a glance.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Types -->
+    <div class="col-12 mt-5">
+        <h2 class="text-center mb-4">Leave Types Available</h2>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Casual Leave</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">For personal matters and unforeseen circumstances.</p>
+                        <p class="mb-0"><strong>Maximum:</strong> 12 days per year</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Sick Leave</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">When you're unwell and need time to recover.</p>
+                        <p class="mb-0"><strong>Maximum:</strong> 10 days per year</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Earned Leave</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Earned through continuous service. Can be carried forward.</p>
+                        <p class="mb-0"><strong>Maximum:</strong> 30 days per year</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
