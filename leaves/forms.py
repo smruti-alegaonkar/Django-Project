@@ -4,6 +4,54 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from .models import LeaveRequest, FacultyProfile
 from datetime import date
+from django import forms
+
+
+class ProfileUpdateForm(forms.ModelForm):
+
+    first_name = forms.CharField(max_length=150)
+    last_name = forms.CharField(max_length=150)
+    email = forms.EmailField()
+
+    class Meta:
+        model = FacultyProfile
+        fields = [
+            "first_name",
+            "last_name",
+            "email",
+            "department",
+            "designation",
+            "phone_number",
+            "profile_picture",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user")
+        super().__init__(*args, **kwargs)
+
+        # Prefill user data
+        self.fields["first_name"].initial = self.user.first_name
+        self.fields["last_name"].initial = self.user.last_name
+        self.fields["email"].initial = self.user.email
+
+        for field in self.fields:
+            self.fields[field].widget.attrs.update({
+                "class": "form-control"
+            })
+
+    def save(self, commit=True):
+        faculty = super().save(commit=False)
+
+        # Update User model
+        self.user.first_name = self.cleaned_data["first_name"]
+        self.user.last_name = self.cleaned_data["last_name"]
+        self.user.email = self.cleaned_data["email"]
+        self.user.save()
+
+        if commit:
+            faculty.save()
+
+        return faculty
 
 class LeaveRequestForm(forms.ModelForm):
     """

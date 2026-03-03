@@ -13,285 +13,190 @@ from .forms import FacultyRegistrationForm
 from django.db.models import Count, Q, Sum
 from django.db import models
 import json
+from django.utils.timezone import now
+from reportlab.pdfgen import canvas
+import io
+from django.contrib.auth.views import LoginView
+from django.urls import reverse_lazy
+from .forms import ProfileUpdateForm
+
+class CustomLoginView(LoginView):
+    template_name = "leaves/login.html"
+
+    def get_success_url(self):
+        user = self.request.user
+
+        if user.is_superuser:
+            return reverse_lazy('leaves:reports')   # Admin goes to reports
+        else:
+            return reverse_lazy('leaves:dashboard') # Faculty goes to dashboard
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
-def reports(request):
-    """Generate leave reports and analytics"""
-    current_year = datetime.now().year
-    
-    # Leave statistics by type
-    leave_by_type = LeaveRequest.objects.filter(
-        start_date__year=current_year
-    ).values('leave_type__name').annotate(
-        total=Count('id'),
-        approved=Count('id', filter=Q(status='approved')),
-        rejected=Count('id', filter=Q(status='rejected')),
-        pending=Count('id', filter=Q(status='pending'))
-    )
-    
-    # Leave statistics by department
-    leave_by_dept = LeaveRequest.objects.filter(
-        start_date__year=current_year
-    ).values('faculty__department').annotate(
-        total=Count('id'),
-        total_days=Sum('number_of_days')
-    ).order_by('-total')
-    
-    # Monthly leave trend
-    monthly_leaves = []
-    for month in range(1, 13):
-        count = LeaveRequest.objects.filter(
-            start_date__year=current_year,
-            start_date__month=month,
-            status='approved'
-        ).count()
-        monthly_leaves.append(count)
-    
-    # Top leave requesters
-    top_requesters = LeaveRequest.objects.filter(
-        start_date__year=current_year
-    ).values(
-        'faculty__user__first_name',
-        'faculty__user__last_name',
-        'faculty__department'
-    ).annotate(
-        total_requests=Count('id'),
-        total_days=Sum('number_of_days')
-    ).order_by('-total_requests')[:10]
-    
-    context = {
-        'leave_by_type': leave_by_type,
-        'leave_by_dept': leave_by_dept,
-        'monthly_leaves': monthly_leaves,
-        'top_requesters': top_requesters,
-        'current_year': current_year,
-    }
-    return render(request, 'leaves/reports.html', context)
-
-
-@login_required
-@user_passes_test(lambda u: u.is_staff)
 def export_leaves_csv(request):
-    """Export leave requests to CSV"""
-    # Get filter parameters
-    status = request.GET.get('status', '')
-    department = request.GET.get('department', '')
-    year = request.GET.get('year', datetime.now().year)
-    
-    # Build queryset
-    leaves = LeaveRequest.objects.filter(start_date__year=year)
-    if status:
-        leaves = leaves.filter(status=status)
-    if department:
-        leaves = leaves.filter(faculty__department=department)
-    
-    # Create CSV response
+
+    year = request.GET.get('year', now().year)
+
+    # Role-based filtering
+    if request.user.is_superuser:
+        leaves = LeaveRequest.objects.filter(start_date__year=year)
+    else:
+        faculty_profile = FacultyProfile.objects.get(user=request.user)
+        leaves = LeaveRequest.objects.filter(
+            faculty=faculty_profile,
+            start_date__year=year
+        )
+
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="leave_requests_{year}.csv"'
-    
+    response['Content-Disposition'] = f'attachment; filename="leave_report_{year}.csv"'
+
     writer = csv.writer(response)
     writer.writerow([
-        'Faculty Name', 'Employee ID', 'Department', 'Leave Type',
-        'Start Date', 'End Date', 'Days', 'Status', 'Applied On',
-        'Reviewed By', 'Reviewed On', 'Remarks'
+        "Faculty",
+        "Leave Type",
+        "Start Date",
+        "End Date",
+        "Days",
+        "Status"
     ])
-    
+
     for leave in leaves:
         writer.writerow([
             leave.faculty.user.get_full_name(),
-            leave.faculty.employee_id,
-            leave.faculty.department,
             leave.leave_type.name,
             leave.start_date,
             leave.end_date,
             leave.number_of_days,
-            leave.get_status_display(),
-            leave.applied_on.strftime('%Y-%m-%d %H:%M'),
-            leave.reviewed_by.get_full_name() if leave.reviewed_by else '',
-            leave.reviewed_on.strftime('%Y-%m-%d %H:%M') if leave.reviewed_on else '',
-            leave.admin_remarks or ''
+            leave.status
         ])
-    
+
     return response
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
 def export_leaves_pdf(request):
-    """Export leave summary to PDF"""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter, A4
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from io import BytesIO
-    
-    # Create PDF buffer
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    # Title
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#0d6efd'),
-        spaceAfter=30,
-        alignment=1  # Center
-    )
-    elements.append(Paragraph('Leave Management Report', title_style))
-    elements.append(Paragraph(f'Generated on: {datetime.now().strftime("%B %d, %Y")}', styles['Normal']))
-    elements.append(Spacer(1, 0.5*inch))
-    
-    # Statistics
-    current_year = datetime.now().year
-    total = LeaveRequest.objects.filter(start_date__year=current_year).count()
-    pending = LeaveRequest.objects.filter(start_date__year=current_year, status='pending').count()
-    approved = LeaveRequest.objects.filter(start_date__year=current_year, status='approved').count()
-    rejected = LeaveRequest.objects.filter(start_date__year=current_year, status='rejected').count()
-    
-    stats_data = [
-        ['Statistics', 'Count'],
-        ['Total Requests', str(total)],
-        ['Pending', str(pending)],
-        ['Approved', str(approved)],
-        ['Rejected', str(rejected)],
-    ]
-    
-    stats_table = Table(stats_data, colWidths=[3*inch, 1.5*inch])
-    stats_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 14),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    elements.append(stats_table)
-    elements.append(Spacer(1, 0.5*inch))
-    
-    # Department-wise summary
-    elements.append(Paragraph('Department-wise Leave Summary', styles['Heading2']))
-    elements.append(Spacer(1, 0.2*inch))
-    
-    dept_data = [['Department', 'Total Requests', 'Total Days']]
-    dept_summary = LeaveRequest.objects.filter(
-        start_date__year=current_year
-    ).values('faculty__department').annotate(
-        total=Count('id'),
-        days=Sum('number_of_days')
-    ).order_by('-total')
-    
-    for dept in dept_summary:
-        dept_data.append([
-            dept['faculty__department'],
-            str(dept['total']),
-            str(dept['days'])
-        ])
-    
-    dept_table = Table(dept_data, colWidths=[2.5*inch, 1.5*inch, 1.5*inch])
-    dept_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    elements.append(dept_table)
-    
-    # Build PDF
-    doc.build(elements)
-    
-    # Return PDF
-    pdf = buffer.getvalue()
-    buffer.close()
-    
-    response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="leave_report_{current_year}.pdf"'
-    response.write(pdf)
-    
+
+    year = request.GET.get("year", now().year)
+
+    if request.user.is_superuser:
+        leaves = LeaveRequest.objects.filter(start_date__year=year)
+    else:
+        faculty_profile = FacultyProfile.objects.get(user=request.user)
+        leaves = LeaveRequest.objects.filter(
+            faculty=faculty_profile,
+            start_date__year=year
+        )
+
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer)
+
+    y = 800
+    p.drawString(200, y, f"Leave Report - {year}")
+    y -= 30
+
+    for leave in leaves:
+        text = f"{leave.faculty.user.get_full_name()} | {leave.leave_type.name} | {leave.start_date} | {leave.status}"
+        p.drawString(50, y, text)
+        y -= 20
+
+    p.showPage()
+    p.save()
+
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="leave_report_{year}.pdf"'
+
     return response
 
 
 @login_required
 def reports(request):
 
-    if not request.user.is_superuser:
-        return redirect("leaves:dashboard")
+    current_year = now().year
 
-    current_year = datetime.now().year
+    # 🔹 Role-based filtering
+    if request.user.is_superuser:
+        leaves = LeaveRequest.objects.filter(start_date__year=current_year)
+    else:
+        faculty_profile = FacultyProfile.objects.get(user=request.user)
+        leaves = LeaveRequest.objects.filter(
+            faculty=faculty_profile,
+        )
 
-    # 🔥 FIXED FILTER (use start_date not applied_on)
-    leaves = LeaveRequest.objects.filter(
-        start_date__year=current_year
+    # 🔹 Leave type stats
+    leave_type_data = leaves.values('leave_type__name').annotate(
+        total=Count('id')
     )
 
-    # Leave by type
-    leave_by_type = leaves.values("leave_type__name").annotate(
-        total=Count("id"),
-        approved=Count("id", filter=Q(status="approved")),
-        rejected=Count("id", filter=Q(status="rejected")),
-        pending=Count("id", filter=Q(status="pending"))
-    )
+    leave_type_labels = [item['leave_type__name'] for item in leave_type_data]
+    leave_type_totals = [item['total'] for item in leave_type_data]
 
-    leave_type_labels = [x["leave_type__name"] for x in leave_by_type]
-    leave_type_totals = [x["total"] for x in leave_by_type]
-    leave_type_approved = [x["approved"] for x in leave_by_type]
-    leave_type_rejected = [x["rejected"] for x in leave_by_type]
-    leave_type_pending = [x["pending"] for x in leave_by_type]
+    leave_type_approved = []
+    leave_type_rejected = []
+    leave_type_pending = []
 
-    # Department report
-    leave_by_dept = leaves.values("faculty__department").annotate(
-        total=Count("id"),
-        total_days=Sum("number_of_days")
-    )
+    for label in leave_type_labels:
+        leave_type_approved.append(
+            leaves.filter(leave_type__name=label, status='approved').count()
+        )
+        leave_type_rejected.append(
+            leaves.filter(leave_type__name=label, status='rejected').count()
+        )
+        leave_type_pending.append(
+            leaves.filter(leave_type__name=label, status='pending').count()
+        )
 
-    # Monthly approved using start_date
-    monthly_data = []
+    # 🔹 Monthly approved
+    monthly_leaves = []
     for month in range(1, 13):
-        count = leaves.filter(
-            status="approved",
-            start_date__month=month
-        ).count()
-        monthly_data.append(count)
+        monthly_leaves.append(
+            leaves.filter(
+                status='approved',
+                start_date__month=month
+            ).count()
+        )
 
-    # Top requesters
-    top_requesters = leaves.values(
-        "faculty__user__first_name",
-        "faculty__user__last_name",
-        "faculty__department"
-    ).annotate(
-        total_requests=Count("id"),
-        total_days=Sum("number_of_days")
-    ).order_by("-total_requests")[:5]
+    # 🔹 ADDITION: Admin-only analytics tables
+    if request.user.is_superuser:
+
+        leave_by_dept = leaves.values(
+            'faculty__department'
+        ).annotate(
+            total=Count('id'),
+            total_days=Sum('number_of_days')
+        )
+
+        top_requesters = leaves.values(
+            'faculty__user__first_name',
+            'faculty__user__last_name',
+            'faculty__department'
+        ).annotate(
+            total_requests=Count('id'),
+            total_days=Sum('number_of_days')
+        ).order_by('-total_requests')[:5]
+
+    else:
+        leave_by_dept = None
+        top_requesters = None
 
     context = {
         "current_year": current_year,
-        "leave_by_dept": leave_by_dept,
-        "top_requesters": top_requesters,
         "leave_type_labels": json.dumps(leave_type_labels),
         "leave_type_totals": json.dumps(leave_type_totals),
         "leave_type_approved": json.dumps(leave_type_approved),
         "leave_type_rejected": json.dumps(leave_type_rejected),
         "leave_type_pending": json.dumps(leave_type_pending),
-        "monthly_leaves": json.dumps(monthly_data),
+        "monthly_leaves": json.dumps(monthly_leaves),
+
+        # 🔹 ADDED
+        "leave_by_dept": leave_by_dept,
+        "top_requesters": top_requesters,
     }
 
     return render(request, "leaves/reports.html", context)
 
-@login_required
 def is_staff_user(user):
-    return user.is_staff
+    return user.is_superuser
 
 @user_passes_test(is_staff_user)
 def pending_requests(request):
@@ -503,73 +408,40 @@ def apply_leave(request):
 
     return render(request, 'leaves/apply_leave.html', {'form': form})
 
-
 @login_required
 def leave_history(request):
-    faculty = request.user.faculty_profile
-    leaves = LeaveRequest.objects.filter(
-        faculty=faculty
+    faculty_profile = FacultyProfile.objects.get(user=request.user)
+
+    leave_requests = LeaveRequest.objects.filter(
+        faculty=faculty_profile
     ).order_by('-applied_on')
 
     return render(request, 'leaves/leave_history.html', {
-        'leaves': leaves
+        'leave_requests': leave_requests
     })
 
 
 @login_required
 def profile(request):
-    return render(request, 'leaves/profile.html')
 
-@login_required
-def my_reports(request):
+    faculty = FacultyProfile.objects.get(user=request.user)
 
-    if request.user.is_superuser:
-        return redirect("leaves:reports")
+    if request.method == "POST":
+        form = ProfileUpdateForm(
+            request.POST,
+            request.FILES,
+            instance=faculty,
+            user=request.user
+        )
 
-    try:
-        faculty = request.user.faculty_profile
-    except:
-        messages.error(request, "Faculty profile not found.")
-        return redirect("leaves:dashboard")
+        if form.is_valid():
+            form.save()
+            return redirect("leaves:profile")
 
-    current_year = datetime.now().year
+    else:
+        form = ProfileUpdateForm(instance=faculty, user=request.user)
 
-    leaves = LeaveRequest.objects.filter(
-        faculty=faculty,
-        start_date__year=current_year
-    )
-
-    # Leave by type
-    leave_by_type = leaves.values("leave_type__name").annotate(
-        total=Count("id"),
-        approved=Count("id", filter=Q(status="approved")),
-        rejected=Count("id", filter=Q(status="rejected")),
-        pending=Count("id", filter=Q(status="pending"))
-    )
-
-    leave_type_labels = [x["leave_type__name"] for x in leave_by_type]
-    leave_type_totals = [x["total"] for x in leave_by_type]
-    leave_type_approved = [x["approved"] for x in leave_by_type]
-    leave_type_rejected = [x["rejected"] for x in leave_by_type]
-    leave_type_pending = [x["pending"] for x in leave_by_type]
-
-    # Monthly approved
-    monthly_data = []
-    for month in range(1, 13):
-        count = leaves.filter(
-            status="approved",
-            start_date__month=month
-        ).count()
-        monthly_data.append(count)
-
-    context = {
-        "current_year": current_year,
-        "leave_type_labels": json.dumps(leave_type_labels),
-        "leave_type_totals": json.dumps(leave_type_totals),
-        "leave_type_approved": json.dumps(leave_type_approved),
-        "leave_type_rejected": json.dumps(leave_type_rejected),
-        "leave_type_pending": json.dumps(leave_type_pending),
-        "monthly_leaves": json.dumps(monthly_data),
-    }
-
-    return render(request, "leaves/reports.html", context)
+    return render(request, "leaves/profile.html", {
+        "faculty": faculty,
+        "form": form
+    })
