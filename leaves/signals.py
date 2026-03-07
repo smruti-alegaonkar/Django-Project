@@ -94,3 +94,14 @@ def send_leave_decision_email(leave_request):
         recipient_list=[faculty_email],
         fail_silently=True,
     )
+
+@receiver(post_save, sender=LeaveRequest)
+def leave_request_notification(sender, instance, created, **kwargs):
+
+    print("SIGNAL TRIGGERED")
+
+    if created:
+        print("NEW LEAVE CREATED")
+        send_leave_application_email(instance)
+    else:
+        print("LEAVE UPDATED")
